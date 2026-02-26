@@ -1,0 +1,24 @@
+@import "tailwindcss";
+
+@theme {
+  /* Variables de la Agencia JLStudios */
+  --color-studio-bg: #09090b;
+  --color-studio-surface: #18181b;
+  --color-studio-border: #27272a;
+  --color-studio-accent: #6d28d9;
+  --color-studio-accent-hover: #7c3aed;
+  --color-studio-text: #fafafa;
+  --color-studio-muted: #a1a1aa;
+}
+
+/* El resto de tus clases (.glass-panel, .btn-primary, etc.) van aquí abajo */
+@utility glass-panel {
+  @apply bg-zinc-900/80 backdrop-blur-xl border border-zinc-800 rounded-xl;
+}
+
+@utility input-field {
+  @apply w-full bg-zinc-900 border border-zinc-700 rounded-lg px-3 py-2
+         text-sm text-zinc-100 placeholder:text-zinc-500
+         focus:outline-none focus:ring-2 focus:ring-violet-500/50 focus:border-violet-500
+         transition-all duration-200;
+}
