@@ -84,8 +84,9 @@ export function LivePreview() {
 
       {/* ─── ÁREA DEL SIMULADOR ─── */}
       
-      <div className="flex-1 w-full flex items-center justify-center relative perspective-1000">
+      <div className="flex-1 w-full flex items-center justify-center relative" style={{ perspective: '1000px' }}
         
+        >
         <AnimatePresence mode="wait">
           <motion.div
             key={device}
@@ -96,7 +97,7 @@ export function LivePreview() {
             className={`
               relative bg-zinc-900 shadow-[0_50px_100px_-20px_rgba(0,0,0,0.5)] border-zinc-800
               ${device === "mobile" 
-                ? "w-[375px] h-[780px] rounded-[3.5rem] border-[12px] border-zinc-900 outline outline-2 outline-zinc-800" 
+                ? "w-[375px] h-[780px] rounded-[3.5rem] border-[12px] border-zinc-900 outline-2 outline-zinc-800" 
                 : "w-full max-w-6xl h-full max-h-[750px] rounded-2xl border-[8px]"
               }
               overflow-hidden transition-all duration-700

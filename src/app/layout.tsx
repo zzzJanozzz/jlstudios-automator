@@ -9,21 +9,20 @@ export const metadata: Metadata = {
   description: "Motor interno de generación de sitios web premium",
 };
 
-export default function RootLayout({
-  children,
-}: {
-  children: React.ReactNode;
-}) {
+// src/app/layout.tsx — agregar dentro de <head> via metadata o link directo
+export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="es">
+      <head>
+        {/* Agregar esta línea */}
+        <link
+          href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap"
+          rel="stylesheet"
+        />
+      </head>
       <body>
         {children}
-        <Toaster
-          position="bottom-right"
-          theme="dark"
-          richColors
-          closeButton
-        />
+        <Toaster position="bottom-right" theme="dark" richColors closeButton />
       </body>
     </html>
   );
