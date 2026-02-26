@@ -1,12 +1,13 @@
 // src/lib/json-parser.ts
+// ─── Layered JSON Parser ──────────────────────────────────────────────────────
+// Recovers BusinessData from raw Gemini text.
+// Layer 1: direct parse
+// Layer 2: extract JSON from markdown fences
+// Layer 3: aggressive regex extraction
+// Layer 4: partial recovery with defaults
+// ─────────────────────────────────────────────────────────────────────────────
 
-import {
-  BusinessData,
-  ExtractedItem,
-  DesignSystem,
-  Niche,
-  NICHE_CONFIGS,
-} from "./types";
+import { BusinessData, DesignSystem, ExtractedItem, ContactInfo, Niche, NICHE_CONFIGS } from "./types";
 
 interface ParseResult {
   success: boolean;
@@ -14,306 +15,199 @@ interface ParseResult {
   error: string | null;
 }
 
-/**
- * Parser de 4 capas. Si una falla, la siguiente lo intenta de otra forma.
- * Capa 1: JSON.parse directo
- * Capa 2: Limpieza de artefactos comunes (markdown fences, trailing commas)
- * Capa 3: Extracción con regex del bloque JSON dentro de texto basura
- * Capa 4: Reconstrucción parcial — salva lo que pueda
- */
+// Default fallback design based on Python defaults
+const DEFAULT_DESIGN: DesignSystem = {
+  primaryColor:    "#D4AF37",
+  secondaryColor:  "#1E1E1E",
+  backgroundColor: "#FFFFFF",
+  textColor:       "#111111",
+  mutedColor:      "#666666",
+  accentColor:     "#D4AF37",
+  fontHeading:     "Playfair Display",
+  fontBody:        "Lato",
+  borderRadius:    "12px",
+  cardShadow:      "0 2px 12px rgba(0,0,0,0.08)",
+  style:           "elegant",
+};
+
+const DEFAULT_CONTACT: ContactInfo = {
+  whatsapp:        "",
+  whatsappMessage: "Hola! Vengo de tu web y quiero consultar.",
+  address:         "",
+  mapUrl:          "",
+  instagram:       "",
+  facebook:        "",
+  email:           "",
+  schedule:        "",
+};
+
 export function parseAndValidateJSON(raw: string, niche: Niche): ParseResult {
-  // ═══ CAPA 1: Parse directo ═══
-  const layer1 = tryDirectParse(raw);
-  if (layer1) {
-    const validated = validateAndNormalize(layer1, niche);
-    if (validated) return { success: true, data: validated, error: null };
+  // Layer 1: Direct parse
+  let parsed = tryParse(raw);
+
+  // Layer 2: Strip markdown fences
+  if (!parsed) {
+    const stripped = raw
+      .replace(/^```json\s*/i, "")
+      .replace(/^```\s*/i, "")
+      .replace(/```\s*$/i, "")
+      .trim();
+    parsed = tryParse(stripped);
   }
 
-  // ═══ CAPA 2: Limpieza de artefactos ═══
-  const cleaned = cleanArtifacts(raw);
-  const layer2 = tryDirectParse(cleaned);
-  if (layer2) {
-    const validated = validateAndNormalize(layer2, niche);
-    if (validated) return { success: true, data: validated, error: null };
-  }
-
-  // ═══ CAPA 3: Extracción regex ═══
-  const extracted = extractJSONBlock(raw);
-  if (extracted) {
-    const layer3 = tryDirectParse(extracted);
-    if (layer3) {
-      const validated = validateAndNormalize(layer3, niche);
-      if (validated) return { success: true, data: validated, error: null };
+  // Layer 3: Find first { ... } block
+  if (!parsed) {
+    const match = raw.match(/\{[\s\S]*\}/);
+    if (match) {
+      parsed = tryParse(match[0]);
     }
   }
 
-  // ═══ CAPA 4: Reconstrucción parcial ═══
-  const reconstructed = attemptPartialReconstruction(raw, niche);
-  if (reconstructed) {
-    return { success: true, data: reconstructed, error: null };
+  // Layer 4: Fix common JSON issues (trailing commas)
+  if (!parsed) {
+    const fixed = raw
+      .replace(/,\s*([}\]])/g, "$1")  // trailing commas
+      .replace(/'/g, '"')              // single → double quotes
+      .replace(/(\w+):/g, '"$1":');    // unquoted keys
+    parsed = tryParse(fixed);
   }
 
-  return {
-    success: false,
-    data: null,
-    error: "Las 4 capas del parser fallaron. El output de la IA es irrecuperable.",
-  };
+  if (!parsed) {
+    return { success: false, data: null, error: "No se pudo parsear el JSON de la respuesta de la IA." };
+  }
+
+  // Normalize to BusinessData contract
+  try {
+    const data = normalize(parsed, niche);
+    return { success: true, data, error: null };
+  } catch (e: any) {
+    return { success: false, data: null, error: `Error de normalización: ${e.message}` };
+  }
 }
 
-// ─── Capa 1: Parse directo ───
-function tryDirectParse(text: string): any | null {
+function tryParse(str: string): Record<string, unknown> | null {
   try {
-    return JSON.parse(text);
+    const obj = JSON.parse(str);
+    return typeof obj === "object" && obj !== null ? obj as Record<string, unknown> : null;
   } catch {
     return null;
   }
 }
 
-// ─── Capa 2: Limpieza de artefactos comunes ───
-function cleanArtifacts(raw: string): string {
-  let cleaned = raw;
+function normalize(raw: Record<string, unknown>, niche: Niche): BusinessData {
+  const nicheConfig = NICHE_CONFIGS[niche];
 
-  // Remover markdown code fences
-  cleaned = cleaned.replace(/^```(?:json)?\s*\n?/gm, "");
-  cleaned = cleaned.replace(/\n?```\s*$/gm, "");
+  // ── Items ──────────────────────────────────────────────────────────────────
+  // Handle both new format (items[]) and Python format (categorias{})
+  let items: ExtractedItem[] = [];
+  const categories: string[] = [];
 
-  // Remover BOM y caracteres invisibles
-  cleaned = cleaned.replace(/^\uFEFF/, "");
-  cleaned = cleaned.replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g, "");
+  if (Array.isArray(raw.items) && raw.items.length > 0) {
+    // New format from AI
+    items = (raw.items as Record<string, unknown>[]).map((it, i) => ({
+      id:          String(it.id || `item_${i + 1}`),
+      name:        String(it.name || it.plato || it.nombre || ""),
+      description: String(it.description || it.descripcion || ""),
+      price:       it.price != null ? String(it.price) : (it.precio != null ? String(it.precio) : null),
+      category:    String(it.category || it.categoria || nicheConfig.itemLabel),
+    })).filter(it => it.name);
 
-  // Remover trailing commas antes de } o ]
-  cleaned = cleaned.replace(/,\s*([\]}])/g, "$1");
+    // Build unique categories in order of appearance
+    items.forEach(it => {
+      if (!categories.includes(it.category)) categories.push(it.category);
+    });
+  } else if (raw.categorias) {
+    // Python format: categorias{name: [{plato, precio, descripcion}]}
+    // or categorias[{nombre, platos:[]}]
+    let catObj: Record<string, unknown[]> = {};
 
-  // Reparar comillas simples a dobles (solo en keys/values)
-  cleaned = cleaned.replace(
-    /(['"])?([a-zA-Z_]\w*)\1\s*:/g,
-    '"$2":'
-  );
-
-  // Remover comentarios estilo JS
-  cleaned = cleaned.replace(/\/\/.*$/gm, "");
-  cleaned = cleaned.replace(/\/\*[\s\S]*?\*\//g, "");
-
-  // Reparar "null" como string
-  cleaned = cleaned.replace(/"null"/gi, "null");
-  cleaned = cleaned.replace(/"undefined"/gi, "null");
-  cleaned = cleaned.replace(/"N\/A"/gi, "null");
-  cleaned = cleaned.replace(/"n\/a"/gi, "null");
-  cleaned = cleaned.replace(/"-"/g, "null");
-
-  return cleaned.trim();
-}
-
-// ─── Capa 3: Extracción con regex ───
-function extractJSONBlock(raw: string): string | null {
-  // Buscar el primer { y el último } balanceado
-  const firstBrace = raw.indexOf("{");
-  if (firstBrace === -1) return null;
-
-  let depth = 0;
-  let lastBrace = -1;
-
-  for (let i = firstBrace; i < raw.length; i++) {
-    if (raw[i] === "{") depth++;
-    if (raw[i] === "}") {
-      depth--;
-      if (depth === 0) {
-        lastBrace = i;
-        break;
-      }
-    }
-  }
-
-  if (lastBrace === -1) return null;
-
-  return raw.substring(firstBrace, lastBrace + 1);
-}
-
-// ─── Capa 4: Reconstrucción parcial ───
-function attemptPartialReconstruction(
-  raw: string,
-  niche: Niche
-): BusinessData | null {
-  try {
-    const config = NICHE_CONFIGS[niche];
-
-    // Intentar extraer nombre del negocio
-    const nameMatch = raw.match(/"businessName"\s*:\s*"([^"]+)"/);
-    const businessName = nameMatch?.[1] || `Mi ${config.label}`;
-
-    // Intentar extraer items con regex agresivo
-    const items: ExtractedItem[] = [];
-    const itemRegex =
-      /"name"\s*:\s*"([^"]+)"[\s\S]*?"description"\s*:\s*"([^"]*)"[\s\S]*?"price"\s*:\s*("([^"]*?)"|null)/g;
-
-    let match;
-    let idx = 1;
-    while ((match = itemRegex.exec(raw)) !== null) {
-      items.push({
-        id: `item_${idx}`,
-        name: match[1],
-        description: match[2] || `${config.itemLabel} de calidad premium.`,
-        price: match[4] || null,
-        category: "General",
-        hasImage: false,
+    if (Array.isArray(raw.categorias)) {
+      // List form from Python
+      (raw.categorias as Record<string, unknown>[]).forEach(c => {
+        const name = String(c.nombre || c.categoria || "General");
+        const platos = (c.platos || c.items || []) as Record<string, unknown>[];
+        catObj[name] = platos;
       });
-      idx++;
+    } else if (typeof raw.categorias === "object") {
+      catObj = raw.categorias as Record<string, unknown[]>;
     }
 
-    if (items.length === 0) return null;
-
-    // Intentar extraer colores
-    const hexMatches = raw.match(/#[0-9a-fA-F]{6}/g) || [];
-
-    const designSystem: DesignSystem = {
-      primaryColor: hexMatches[0] || "#6d28d9",
-      secondaryColor: hexMatches[1] || "#1e1b4b",
-      accentColor: hexMatches[2] || "#f59e0b",
-      backgroundColor: hexMatches[3] || "#fafafa",
-      textColor: hexMatches[4] || "#18181b",
-      mutedColor: hexMatches[5] || "#71717a",
-      fontHeading: extractFont(raw, "fontHeading") || "Inter",
-      fontBody: extractFont(raw, "fontBody") || "Inter",
-      style: "minimal",
-      borderRadius: "12px",
-      cardShadow: "0 1px 3px rgba(0,0,0,0.1), 0 1px 2px rgba(0,0,0,0.06)",
-    };
-
-    // Extraer categorías únicas
-    const categories = [...new Set(items.map((i) => i.category))];
-
-    return {
-      businessName,
-      tagline: `Tu ${config.label.toLowerCase()} de confianza`,
-      niche,
-      items,
-      categories,
-      designSystem,
-      contactInfo: {
-        whatsapp: "",
-        address: "",
-        mapUrl: "",
-        instagram: "",
-        facebook: "",
-        email: "",
-        schedule: "",
-      },
-      seoDescription: `${businessName} — ${config.label}. Descubrí nuestros servicios y contactanos.`,
-    };
-  } catch {
-    return null;
+    let counter = 1;
+    Object.entries(catObj).forEach(([catName, platos]) => {
+      categories.push(catName);
+      (platos as Record<string, unknown>[]).forEach(p => {
+        items.push({
+          id:          `item_${counter++}`,
+          name:        String(p.plato || p.nombre || p.name || ""),
+          description: String(p.descripcion || p.description || ""),
+          price:       p.precio != null ? String(p.precio) : (p.price != null ? String(p.price) : null),
+          category:    catName,
+        });
+      });
+    });
   }
-}
 
-function extractFont(raw: string, key: string): string | null {
-  const match = raw.match(new RegExp(`"${key}"\\s*:\\s*"([^"]+)"`));
-  return match?.[1] || null;
-}
+  // Fallback categories from raw
+  if (categories.length === 0 && Array.isArray(raw.categories)) {
+    (raw.categories as unknown[]).forEach(c => categories.push(String(c)));
+  }
 
-// ─── Validador y Normalizador Final ───
-function validateAndNormalize(obj: any, niche: Niche): BusinessData | null {
-  if (!obj || typeof obj !== "object") return null;
-
-  const config = NICHE_CONFIGS[niche];
-
-  // Validar campos obligatorios con fallbacks inteligentes
-  const businessName =
-    typeof obj.businessName === "string" && obj.businessName.trim()
-      ? obj.businessName.trim()
-      : `Mi ${config.label}`;
-
-  const tagline =
-    typeof obj.tagline === "string" && obj.tagline.trim()
-      ? obj.tagline.trim()
-      : `Tu ${config.label.toLowerCase()} de confianza`;
-
-  const seoDescription =
-    typeof obj.seoDescription === "string" && obj.seoDescription.trim()
-      ? obj.seoDescription.trim().substring(0, 160)
-      : `${businessName} — Descubrí todo lo que tenemos para vos.`;
-
-  // Validar y normalizar items
-  const rawItems = Array.isArray(obj.items) ? obj.items : [];
-  const items: ExtractedItem[] = rawItems
-    .filter((item: any) => item && typeof item.name === "string" && item.name.trim())
-    .map((item: any, idx: number) => ({
-      id: typeof item.id === "string" ? item.id : `item_${idx + 1}`,
-      name: item.name.trim(),
-      description:
-        typeof item.description === "string" && item.description.trim()
-          ? item.description.trim()
-          : `${config.itemLabel.charAt(0).toUpperCase() + config.itemLabel.slice(1)} selecto de ${businessName}.`,
-      price: normalizePrice(item.price),
-      category:
-        typeof item.category === "string" && item.category.trim()
-          ? item.category.trim()
-          : "General",
-      hasImage: Boolean(item.hasImage),
-      imageUrl: typeof item.imageUrl === "string" ? item.imageUrl : undefined,
-    }));
-
-  if (items.length === 0) return null;
-
-  // Validar design system
-  const ds = obj.designSystem || {};
+  // ── Design System ──────────────────────────────────────────────────────────
+  const rawDs = (raw.designSystem || raw.design || {}) as Record<string, unknown>;
   const designSystem: DesignSystem = {
-    primaryColor: isValidHex(ds.primaryColor) ? ds.primaryColor : "#6d28d9",
-    secondaryColor: isValidHex(ds.secondaryColor) ? ds.secondaryColor : "#1e1b4b",
-    accentColor: isValidHex(ds.accentColor) ? ds.accentColor : "#f59e0b",
-    backgroundColor: isValidHex(ds.backgroundColor) ? ds.backgroundColor : "#fafafa",
-    textColor: isValidHex(ds.textColor) ? ds.textColor : "#18181b",
-    mutedColor: isValidHex(ds.mutedColor) ? ds.mutedColor : "#71717a",
-    fontHeading: typeof ds.fontHeading === "string" ? ds.fontHeading : "Inter",
-    fontBody: typeof ds.fontBody === "string" ? ds.fontBody : "Inter",
-    style: ["minimal", "bold", "elegant", "playful", "corporate"].includes(ds.style)
-      ? ds.style
-      : "minimal",
-    borderRadius: typeof ds.borderRadius === "string" ? ds.borderRadius : "12px",
-    cardShadow:
-      typeof ds.cardShadow === "string"
-        ? ds.cardShadow
-        : "0 1px 3px rgba(0,0,0,0.1), 0 1px 2px rgba(0,0,0,0.06)",
+    primaryColor:    coerceHex(rawDs.primaryColor    || rawDs.color_primary,    DEFAULT_DESIGN.primaryColor),
+    secondaryColor:  coerceHex(rawDs.secondaryColor  || rawDs.color_secondary,  DEFAULT_DESIGN.secondaryColor),
+    backgroundColor: coerceHex(rawDs.backgroundColor || rawDs.color_bg,        DEFAULT_DESIGN.backgroundColor),
+    textColor:       coerceHex(rawDs.textColor       || rawDs.color_text,       DEFAULT_DESIGN.textColor),
+    mutedColor:      coerceHex(rawDs.mutedColor,                                DEFAULT_DESIGN.mutedColor),
+    accentColor:     coerceHex(rawDs.accentColor,                               DEFAULT_DESIGN.accentColor),
+    fontHeading:     String(rawDs.fontHeading || rawDs.font_heading || DEFAULT_DESIGN.fontHeading),
+    fontBody:        String(rawDs.fontBody    || rawDs.font_body    || DEFAULT_DESIGN.fontBody),
+    borderRadius:    String(rawDs.borderRadius || rawDs.border_radius || DEFAULT_DESIGN.borderRadius),
+    cardShadow:      String(rawDs.cardShadow  || DEFAULT_DESIGN.cardShadow),
+    style:           validateStyle(rawDs.style) ?? DEFAULT_DESIGN.style,
   };
 
-  const categories = Array.isArray(obj.categories)
-    ? obj.categories.filter((c: any) => typeof c === "string")
-    : [...new Set(items.map((i) => i.category))];
+  // ── Contact ────────────────────────────────────────────────────────────────
+  const rawContact = (raw.contactInfo || raw.contact || {}) as Record<string, unknown>;
+  const rawRedes   = (raw.redes || {}) as Record<string, unknown>;
+
+  const contactInfo: ContactInfo = {
+    whatsapp:        String(rawContact.whatsapp        || rawRedes.whatsapp        || ""),
+    whatsappMessage: String(rawContact.whatsappMessage || raw.mensaje_whatsapp     || DEFAULT_CONTACT.whatsappMessage),
+    address:         String(rawContact.address         || raw.direccion            || ""),
+    mapUrl:          String(rawContact.mapUrl          || rawRedes.maps            || ""),
+    instagram:       String(rawContact.instagram       || rawRedes.instagram       || "").replace("@", ""),
+    facebook:        String(rawContact.facebook        || rawRedes.facebook        || "").replace("@", ""),
+    email:           String(rawContact.email           || raw.email                || ""),
+    schedule:        String(rawContact.schedule        || raw.horario              || ""),
+  };
+
+  // ── Layout ─────────────────────────────────────────────────────────────────
+  const layoutRaw = raw.layoutStyle || raw.layout_mode || rawDs.layout_mode || "grid";
+  const layoutStyle: "grid" | "list" = layoutRaw === "list" ? "list" : "grid";
 
   return {
-    businessName,
-    tagline,
+    businessName:  String(raw.businessName || raw.nombre_local || "Mi Negocio"),
+    tagline:       String(raw.tagline      || raw.slogan       || ""),
     niche,
-    items,
-    categories: categories.length > 0 ? categories : ["General"],
+    seoDescription: String(raw.seoDescription || raw.descripcionSEO || "").slice(0, 155),
     designSystem,
-    contactInfo: {
-      whatsapp: obj.contactInfo?.whatsapp || "",
-      address: obj.contactInfo?.address || "",
-      mapUrl: obj.contactInfo?.mapUrl || "",
-      instagram: obj.contactInfo?.instagram || "",
-      facebook: obj.contactInfo?.facebook || "",
-      email: obj.contactInfo?.email || "",
-      schedule: obj.contactInfo?.schedule || "",
-    },
-    seoDescription,
+    layoutStyle,
+    categories:    categories.length > 0 ? categories : [nicheConfig.itemLabel + "s"],
+    items,
+    contactInfo,
   };
 }
 
-function isValidHex(val: any): boolean {
-  return typeof val === "string" && /^#[0-9a-fA-F]{6}$/.test(val);
+function coerceHex(val: unknown, fallback: string): string {
+  if (typeof val === "string" && /^#[0-9a-fA-F]{6}$/.test(val.trim())) {
+    return val.trim();
+  }
+  return fallback;
 }
 
-function normalizePrice(val: any): string | null {
-  if (val === null || val === undefined) return null;
-  if (typeof val === "number") return `$${val}`;
-  if (typeof val === "string") {
-    const trimmed = val.trim();
-    if (!trimmed || trimmed.toLowerCase() === "null" || trimmed === "-" || trimmed.toLowerCase() === "n/a") {
-      return null;
-    }
-    // Si no tiene símbolo de moneda, agregar $
-    if (/^\d/.test(trimmed)) return `$${trimmed}`;
-    return trimmed;
-  }
-  return null;
+function validateStyle(val: unknown): DesignSystem["style"] | null {
+  const valid = ["minimal", "bold", "elegant", "playful", "corporate"];
+  return valid.includes(String(val)) ? (val as DesignSystem["style"]) : null;
 }

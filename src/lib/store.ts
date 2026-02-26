@@ -1,30 +1,23 @@
 // src/lib/store.ts
-
 import { create } from "zustand";
-import {
-  AppState,
-  BusinessData,
-  DesignSystem,
-  ExtractedItem,
-  Niche,
-} from "./types";
+import { AppState, BusinessData, DesignSystem, ExtractedItem, ContactInfo, Niche } from "./types";
 
-export const useAppStore = create<AppState>((set, get) => ({
-  step: "upload",
-  niche: null,
-  uploadedFiles: [],
-  businessData: null,
-  isProcessing: false,
-  error: null,
+export const useAppStore = create<AppState>((set) => ({
+  step:           "upload",
+  niche:          null,
+  uploadedFiles:  [],
+  businessData:   null,
+  isProcessing:   false,
+  error:          null,
 
-  setStep: (step) => set({ step }),
+  setStep:  (step)  => set({ step }),
   setNiche: (niche) => set({ niche }),
   setUploadedFiles: (files) => set({ uploadedFiles: files }),
 
   setBusinessData: (data) =>
     set({ businessData: data, step: "editing", isProcessing: false }),
 
-  updateDesignSystem: (updates) =>
+  updateDesignSystem: (updates: Partial<DesignSystem>) =>
     set((state) => {
       if (!state.businessData) return state;
       return {
@@ -35,7 +28,7 @@ export const useAppStore = create<AppState>((set, get) => ({
       };
     }),
 
-  updateItem: (id, updates) =>
+  updateItem: (id: string, updates: Partial<ExtractedItem>) =>
     set((state) => {
       if (!state.businessData) return state;
       return {
@@ -48,7 +41,7 @@ export const useAppStore = create<AppState>((set, get) => ({
       };
     }),
 
-  updateContactInfo: (updates) =>
+  updateContactInfo: (updates: Partial<ContactInfo>) =>
     set((state) => {
       if (!state.businessData) return state;
       return {
@@ -59,27 +52,24 @@ export const useAppStore = create<AppState>((set, get) => ({
       };
     }),
 
-  updateBusinessField: (field, value) =>
+  updateBusinessField: (field: keyof BusinessData, value: unknown) =>
     set((state) => {
       if (!state.businessData) return state;
       return {
-        businessData: {
-          ...state.businessData,
-          [field]: value,
-        },
+        businessData: { ...state.businessData, [field]: value },
       };
     }),
 
   setProcessing: (v) => set({ isProcessing: v }),
-  setError: (e) => set({ error: e }),
+  setError:      (e) => set({ error: e }),
 
   reset: () =>
     set({
-      step: "upload",
-      niche: null,
+      step:          "upload",
+      niche:         null,
       uploadedFiles: [],
-      businessData: null,
-      isProcessing: false,
-      error: null,
+      businessData:  null,
+      isProcessing:  false,
+      error:         null,
     }),
 }));
