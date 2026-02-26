@@ -1,142 +1,272 @@
+// src/components/LivePreview.tsx
 "use client";
 
 import { useAppStore } from "@/lib/store";
 import { renderPremiumStarter } from "@/templates/premium-starter";
-import { useEffect, useState, useRef } from "react";
-import { Monitor, Smartphone, RefreshCw, ExternalLink } from "lucide-react";
+import { useEffect, useState, useRef, useCallback } from "react";
+import { Monitor, Smartphone, RefreshCw, ExternalLink, ZoomIn, ZoomOut } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
+
+// Device configs
+const DEVICES = {
+  mobile: { width: 390, height: 844, label: "iPhone 14 Pro", scale: 0.72 },
+  tablet: { width: 768, height: 1024, label: "iPad", scale: 0.55 },
+  desktop: { width: 1280, height: 800, label: "Desktop", scale: 1 },
+} as const;
+
+type DeviceKey = keyof typeof DEVICES;
 
 export function LivePreview() {
   const { businessData } = useAppStore();
   const [htmlContent, setHtmlContent] = useState("");
-  const [device, setDevice] = useState<"mobile" | "desktop">("mobile");
+  const [device, setDevice] = useState<DeviceKey>("mobile");
   const [isSyncing, setIsSyncing] = useState(false);
+  const [renderKey, setRenderKey] = useState(0); // Force iframe remount on content change
   const iframeRef = useRef<HTMLIFrameElement>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
+  const [containerSize, setContainerSize] = useState({ w: 800, h: 600 });
 
-  // Efecto de renderizado reactivo
+  // Measure available container space for scaling
   useEffect(() => {
-    if (businessData) {
-      setIsSyncing(true);
-      // Generamos el HTML usando el motor de plantillas premium
-      const generated = renderPremiumStarter(businessData);
-      setHtmlContent(generated);
-      
-      // Pequeño delay visual para el indicador de sincronización
-      const timer = setTimeout(() => setIsSyncing(false), 400);
-      return () => clearTimeout(timer);
-    }
+    const measure = () => {
+      if (containerRef.current) {
+        setContainerSize({
+          w: containerRef.current.clientWidth,
+          h: containerRef.current.clientHeight,
+        });
+      }
+    };
+    measure();
+    const ro = new ResizeObserver(measure);
+    if (containerRef.current) ro.observe(containerRef.current);
+    return () => ro.disconnect();
+  }, []);
+
+  // Re-render HTML whenever businessData changes
+  useEffect(() => {
+    if (!businessData) return;
+    setIsSyncing(true);
+    // Slight timeout so the UI can show the syncing indicator
+    const t = setTimeout(() => {
+      const html = renderPremiumStarter(businessData);
+      setHtmlContent(html);
+      setRenderKey((k) => k + 1);
+      setIsSyncing(false);
+    }, 80);
+    return () => clearTimeout(t);
   }, [businessData]);
+
+  // Compute scale so the simulated device fits inside the container
+  const computedScale = useCallback((): number => {
+    const dev = DEVICES[device];
+    const padH = 80; // toolbar
+    const padV = 96; // top + bottom padding
+    const availW = containerSize.w - padH;
+    const availH = containerSize.h - padV;
+    const scaleW = availW / dev.width;
+    const scaleH = availH / dev.height;
+    return Math.min(scaleW, scaleH, 1); // never upscale
+  }, [device, containerSize]);
+
+  const scale = computedScale();
+  const dev = DEVICES[device];
+
+  const openExternal = useCallback(() => {
+    const win = window.open("", "_blank");
+    if (win && htmlContent) {
+      win.document.open();
+      win.document.write(htmlContent);
+      win.document.close();
+    }
+  }, [htmlContent]);
 
   if (!businessData) return null;
 
   return (
-    <div className="flex flex-col items-center w-full h-full p-4 overflow-hidden">
-      
-      {/* ─── BARRA DE HERRAMIENTAS DE PREVIEW ─── */}
-      <div className="flex items-center justify-between w-full max-w-5xl mb-6 bg-zinc-900/80 border border-zinc-800 p-2 rounded-2xl backdrop-blur-md shadow-xl">
-        
-        {/* Indicador de Estado */}
-        <div className="flex items-center gap-3 px-3">
-          <div className={`w-2 h-2 rounded-full ${isSyncing ? 'bg-yellow-500 animate-pulse' : 'bg-green-500 shadow-[0_0_10px_rgba(34,197,94,0.5)]'}`} />
+    <div className="flex flex-col w-full h-full overflow-hidden bg-zinc-950">
+      {/* ── TOOLBAR ── */}
+      <div className="flex-shrink-0 flex items-center justify-between px-4 py-2.5 border-b border-zinc-800/80 bg-zinc-900/60 backdrop-blur-sm">
+        {/* Status indicator */}
+        <div className="flex items-center gap-2.5 min-w-[120px]">
+          <div
+            className={`w-2 h-2 rounded-full transition-all duration-300 ${
+              isSyncing
+                ? "bg-amber-400 animate-pulse"
+                : "bg-emerald-500 shadow-[0_0_8px_rgba(52,211,153,0.6)]"
+            }`}
+          />
           <span className="text-[10px] font-bold uppercase tracking-widest text-zinc-500">
-            {isSyncing ? 'Sincronizando...' : 'Live Preview'}
+            {isSyncing ? "Sincronizando…" : "Live Preview"}
           </span>
         </div>
 
-        {/* Toggles de Dispositivo */}
-        <div className="flex bg-zinc-800/50 p-1 rounded-xl border border-zinc-700/50">
+        {/* Device selector */}
+        <div className="flex items-center gap-1 bg-zinc-800/60 border border-zinc-700/50 p-1 rounded-xl">
           <button
             onClick={() => setDevice("mobile")}
-            className={`flex items-center gap-2 px-4 py-1.5 rounded-lg text-xs font-bold transition-all ${
-              device === "mobile" 
-              ? "bg-violet-600 text-white shadow-lg" 
-              : "text-zinc-500 hover:text-zinc-300"
+            title="Mobile"
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
+              device === "mobile"
+                ? "bg-violet-600 text-white shadow-lg shadow-violet-500/20"
+                : "text-zinc-500 hover:text-zinc-300"
             }`}
           >
-            <Smartphone size={14} /> Mobile
+            <Smartphone size={13} />
+            <span className="hidden sm:inline">Mobile</span>
+          </button>
+          <button
+            onClick={() => setDevice("tablet")}
+            title="Tablet"
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
+              device === "tablet"
+                ? "bg-violet-600 text-white shadow-lg shadow-violet-500/20"
+                : "text-zinc-500 hover:text-zinc-300"
+            }`}
+          >
+            <Monitor size={13} />
+            <span className="hidden sm:inline">Tablet</span>
           </button>
           <button
             onClick={() => setDevice("desktop")}
-            className={`flex items-center gap-2 px-4 py-1.5 rounded-lg text-xs font-bold transition-all ${
-              device === "desktop" 
-              ? "bg-violet-600 text-white shadow-lg" 
-              : "text-zinc-500 hover:text-zinc-300"
+            title="Desktop"
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
+              device === "desktop"
+                ? "bg-violet-600 text-white shadow-lg shadow-violet-500/20"
+                : "text-zinc-500 hover:text-zinc-300"
             }`}
           >
-            <Monitor size={14} /> Desktop
+            <Monitor size={14} />
+            <span className="hidden sm:inline">Desktop</span>
           </button>
         </div>
 
-        {/* Acciones Rápidas */}
-        <div className="flex gap-2">
-           <button 
-             onClick={() => {
-               const win = window.open();
-               win?.document.write(htmlContent);
-             }}
-             className="p-2 hover:bg-zinc-800 rounded-lg text-zinc-500 transition-colors"
-             title="Abrir en pestaña nueva"
-           >
-             <ExternalLink size={16} />
-           </button>
+        {/* Actions */}
+        <div className="flex items-center gap-1 min-w-[120px] justify-end">
+          <span className="text-[10px] text-zinc-600 font-mono hidden md:inline">
+            {dev.width}×{dev.height} · {Math.round(scale * 100)}%
+          </span>
+          <button
+            onClick={openExternal}
+            title="Abrir en nueva pestaña"
+            className="p-2 hover:bg-zinc-800 rounded-lg text-zinc-500 hover:text-zinc-300 transition-colors"
+          >
+            <ExternalLink size={15} />
+          </button>
+          <button
+            onClick={() => setRenderKey((k) => k + 1)}
+            title="Forzar recarga"
+            className="p-2 hover:bg-zinc-800 rounded-lg text-zinc-500 hover:text-zinc-300 transition-colors"
+          >
+            <RefreshCw size={15} className={isSyncing ? "animate-spin" : ""} />
+          </button>
         </div>
       </div>
 
-      {/* ─── ÁREA DEL SIMULADOR ─── */}
-      
-      <div className="flex-1 w-full flex items-center justify-center relative" style={{ perspective: '1000px' }}
-        
-        >
+      {/* ── CANVAS ── */}
+      <div
+        ref={containerRef}
+        className="flex-1 flex items-center justify-center overflow-hidden relative"
+        style={{
+          background:
+            "radial-gradient(ellipse at 60% 40%, rgba(109,40,217,0.05) 0%, transparent 60%), #09090b",
+          backgroundImage:
+            "radial-gradient(ellipse at 60% 40%, rgba(109,40,217,0.05) 0%, transparent 60%), linear-gradient(rgba(255,255,255,0.015) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.015) 1px, transparent 1px)",
+          backgroundSize: "100% 100%, 32px 32px, 32px 32px",
+        }}
+      >
         <AnimatePresence mode="wait">
           <motion.div
             key={device}
-            initial={{ opacity: 0, scale: 0.95, rotateX: 5 }}
-            animate={{ opacity: 1, scale: 1, rotateX: 0 }}
-            exit={{ opacity: 0, scale: 1.05 }}
-            transition={{ duration: 0.4, ease: "circOut" }}
-            className={`
-              relative bg-zinc-900 shadow-[0_50px_100px_-20px_rgba(0,0,0,0.5)] border-zinc-800
-              ${device === "mobile" 
-                ? "w-[375px] h-[780px] rounded-[3.5rem] border-[12px] border-zinc-900 outline-2 outline-zinc-800" 
-                : "w-full max-w-6xl h-full max-h-[750px] rounded-2xl border-[8px]"
-              }
-              overflow-hidden transition-all duration-700
-            `}
+            initial={{ opacity: 0, scale: 0.94, y: 12 }}
+            animate={{ opacity: 1, scale: 1, y: 0 }}
+            exit={{ opacity: 0, scale: 1.03, y: -8 }}
+            transition={{ duration: 0.35, ease: [0.4, 0, 0.2, 1] }}
+            style={{
+              width: dev.width,
+              height: dev.height,
+              transform: `scale(${scale})`,
+              transformOrigin: "center center",
+              flexShrink: 0,
+            }}
+            className={`relative bg-zinc-900 overflow-hidden shadow-2xl ${
+              device === "mobile"
+                ? "rounded-[48px] border-[10px] border-zinc-800 ring-1 ring-zinc-700/50"
+                : device === "tablet"
+                ? "rounded-[24px] border-[8px] border-zinc-800 ring-1 ring-zinc-700/50"
+                : "rounded-xl border-[4px] border-zinc-800"
+            }`}
           >
-            {/* Elementos Estéticos del Celular (Notch) */}
+            {/* Mobile notch */}
             {device === "mobile" && (
-              <div className="absolute top-0 left-1/2 -translate-x-1/2 w-40 h-7 bg-zinc-900 rounded-b-3xl z-30 flex items-center justify-center">
-                <div className="w-12 h-1.5 bg-zinc-800 rounded-full" />
+              <div className="absolute top-0 inset-x-0 flex justify-center z-30 pointer-events-none">
+                <div className="w-36 h-8 bg-zinc-800 rounded-b-3xl flex items-center justify-center gap-2">
+                  <div className="w-2 h-2 rounded-full bg-zinc-700" />
+                  <div className="w-16 h-1.5 bg-zinc-700 rounded-full" />
+                </div>
               </div>
             )}
 
-            {/* Iframe del sitio */}
+            {/* Tablet camera bar */}
+            {device === "tablet" && (
+              <div className="absolute top-2 left-1/2 -translate-x-1/2 z-30 pointer-events-none">
+                <div className="w-3 h-3 rounded-full bg-zinc-700" />
+              </div>
+            )}
+
+            {/* THE IFRAME — key forces full remount to prevent stale CSS */}
             <iframe
+              key={`${device}-${renderKey}`}
               ref={iframeRef}
-              title="JLStudios Preview"
+              title="JLStudios Site Preview"
               srcDoc={htmlContent}
-              className="w-full h-full bg-white transition-opacity duration-300"
-              sandbox="allow-scripts allow-same-origin"
+              className={`w-full h-full bg-white ${device === "mobile" ? "pt-8" : ""}`}
+              sandbox="allow-scripts allow-same-origin allow-popups"
+              loading="eager"
             />
 
-            {/* Overlay de carga suave */}
-            {isSyncing && (
-              <div className="absolute inset-0 bg-zinc-950/20 backdrop-blur-[2px] pointer-events-none flex items-center justify-center">
-                <RefreshCw className="w-8 h-8 text-violet-500 animate-spin opacity-40" />
-              </div>
-            )}
+            {/* Loading overlay */}
+            <AnimatePresence>
+              {isSyncing && (
+                <motion.div
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  exit={{ opacity: 0 }}
+                  className="absolute inset-0 bg-zinc-950/30 backdrop-blur-[1px] flex items-center justify-center z-40 pointer-events-none"
+                >
+                  <div className="bg-zinc-900/90 border border-zinc-700 rounded-xl px-4 py-3 flex items-center gap-2.5">
+                    <RefreshCw size={14} className="text-violet-400 animate-spin" />
+                    <span className="text-xs text-zinc-300 font-medium">Actualizando…</span>
+                  </div>
+                </motion.div>
+              )}
+            </AnimatePresence>
           </motion.div>
         </AnimatePresence>
 
-        {/* Decoración: Reflejo en el suelo (opcional para estilo Apple) */}
-        <div className="absolute bottom-[-100px] w-full h-40 bg-gradient-to-t from-transparent via-violet-500/5 to-transparent blur-3xl pointer-events-none" />
+        {/* Floor reflection */}
+        <div
+          className="absolute bottom-0 left-0 right-0 h-24 pointer-events-none"
+          style={{
+            background:
+              "linear-gradient(to top, rgba(109,40,217,0.04), transparent)",
+            filter: "blur(20px)",
+          }}
+        />
       </div>
 
-      {/* Footer del Preview */}
-      <div className="mt-6 flex items-center gap-6 text-[10px] text-zinc-600 font-medium uppercase tracking-widest">
-        <span>Resolución: {device === "mobile" ? "375x812 (iPhone 13/14)" : "Dynamic Desktop"}</span>
-        <div className="w-1 h-1 bg-zinc-800 rounded-full" />
-        <span>FPS: 60 (Optimized)</span>
+      {/* ── STATUS BAR ── */}
+      <div className="flex-shrink-0 flex items-center justify-center gap-4 py-2 border-t border-zinc-800/50 bg-zinc-900/30">
+        <span className="text-[9px] text-zinc-600 font-mono uppercase tracking-widest">
+          {dev.label}
+        </span>
+        <div className="w-1 h-1 rounded-full bg-zinc-700" />
+        <span className="text-[9px] text-zinc-600 font-mono uppercase tracking-widest">
+          {dev.width} × {dev.height}
+        </span>
+        <div className="w-1 h-1 rounded-full bg-zinc-700" />
+        <span className="text-[9px] text-zinc-600 font-mono uppercase tracking-widest">
+          Zoom {Math.round(scale * 100)}%
+        </span>
       </div>
     </div>
   );
