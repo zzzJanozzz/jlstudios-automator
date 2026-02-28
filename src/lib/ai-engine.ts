@@ -1,5 +1,5 @@
 // src/lib/ai-engine.ts
-import { GoogleGenerativeAI, HarmCategory, HarmBlockThreshold } from "@google/generative-ai";
+import { GoogleGenerativeAI, HarmCategory, HarmBlockThreshold, Part } from "@google/generative-ai";
 import { buildMasterPrompt } from "./meta-prompt";
 import { parseAndValidateJSON } from "./json-parser";
 import { BusinessData, Niche } from "./types";
@@ -22,7 +22,7 @@ export async function analyzeWithAI(
 
   try {
     const model = genAI.getGenerativeModel({
-      model: "gemini-2.0-flash",
+      model: "gemini-2.5-flash",
       safetySettings: [
         { category: HarmCategory.HARM_CATEGORY_HARASSMENT,        threshold: HarmBlockThreshold.BLOCK_NONE },
         { category: HarmCategory.HARM_CATEGORY_HATE_SPEECH,       threshold: HarmBlockThreshold.BLOCK_NONE },
@@ -38,7 +38,7 @@ export async function analyzeWithAI(
       },
     });
 
-    const parts: { text?: string; inlineData?: { mimeType: string; data: string } }[] = [
+    const parts: Part[] = [
       { text: masterPrompt },
     ];
 
@@ -55,7 +55,7 @@ export async function analyzeWithAI(
       });
     }
 
-    const result   = await model.generateContent(parts);
+    const result = await model.generateContent(parts);
     const response = await result.response;
     const rawText  = response.text();
 
@@ -102,7 +102,7 @@ async function attemptRecovery(
 ): Promise<{ success: boolean; data: BusinessData | null }> {
   try {
     const model = genAI.getGenerativeModel({
-      model: "gemini-2.0-flash",
+      model: "gemini-2.5-flash",
       generationConfig: {
         temperature: 0.1,
         maxOutputTokens: 8192,
