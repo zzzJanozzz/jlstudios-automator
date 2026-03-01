@@ -42,7 +42,7 @@ export function ColorPicker({ label, value, onChange }: ColorPickerProps) {
       <div className="flex items-center gap-2">
         <button
           onClick={() => setIsOpen(!isOpen)}
-          className="w-8 h-8 rounded-lg border border-zinc-700 flex-shrink-0 cursor-pointer transition-transform hover:scale-110"
+          className="w-8 h-8 rounded-lg border border-zinc-700 shrink-0 cursor-pointer transition-transform hover:scale-110"
           style={{ backgroundColor: value }}
         />
         <input

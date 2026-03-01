@@ -1,20 +1,37 @@
 // src/lib/store.ts
 import { create } from "zustand";
-import { AppState, BusinessData, DesignSystem, ExtractedItem, ContactInfo } from "./types";
+import {
+  AppState, BusinessData, DesignSystem, ExtractedItem,
+  ContactInfo, ScheduleDay, Niche, NICHE_CONFIGS, makeEmptyBusinessData,
+} from "./types";
 
-let itemCounter = 1000;
+let itemCounter = Date.now();
 function newId(): string { return `item_${++itemCounter}`; }
 
-export const useAppStore = create<AppState>((set, get) => ({
-  step: "upload", niche: null, uploadedFiles: [], businessData: null,
-  isProcessing: false, error: null,
+export const useAppStore = create<AppState>((set) => ({
+  step: "upload",
+  niche: null,
+  uploadedFiles: [],
+  businessData: null,
+  isProcessing: false,
+  error: null,
 
   setStep:  (step)  => set({ step }),
   setNiche: (niche) => set({ niche }),
   setUploadedFiles: (files) => set({ uploadedFiles: files }),
 
-  setBusinessData: (data) =>
+  setBusinessData: (data: BusinessData) =>
     set({ businessData: data, step: "editing", isProcessing: false }),
+
+  /** Skip AI processing — initialise with a blank structure and jump straight to editor */
+  createFromScratch: (niche: Niche) =>
+    set({
+      niche,
+      businessData: makeEmptyBusinessData(niche),
+      step: "editing",
+      isProcessing: false,
+      error: null,
+    }),
 
   updateDesignSystem: (updates: Partial<DesignSystem>) =>
     set((state) => {
@@ -33,7 +50,7 @@ export const useAppStore = create<AppState>((set, get) => ({
       return {
         businessData: {
           ...state.businessData,
-          items: state.businessData.items.map(item =>
+          items: state.businessData.items.map((item) =>
             item.id === id ? { ...item, ...updates } : item
           ),
         },
@@ -51,6 +68,20 @@ export const useAppStore = create<AppState>((set, get) => ({
       };
     }),
 
+  /** Update a single day in the structured schedule array */
+  updateScheduleDay: (index: number, updates: Partial<ScheduleDay>) =>
+    set((state) => {
+      if (!state.businessData) return state;
+      const schedule = [...state.businessData.contactInfo.schedule];
+      schedule[index] = { ...schedule[index], ...updates };
+      return {
+        businessData: {
+          ...state.businessData,
+          contactInfo: { ...state.businessData.contactInfo, schedule },
+        },
+      };
+    }),
+
   updateBusinessField: (field: keyof BusinessData, value: unknown) =>
     set((state) => {
       if (!state.businessData) return state;
@@ -60,14 +91,14 @@ export const useAppStore = create<AppState>((set, get) => ({
   addItem: (category: string) =>
     set((state) => {
       if (!state.businessData) return state;
-      const { NICHE_CONFIGS } = require("./types");
-      const itemLabel = NICHE_CONFIGS[state.businessData.niche]?.itemLabel || "ítem";
+      const itemLabel = NICHE_CONFIGS[state.businessData.niche]?.itemLabel ?? "ítem";
       const newItem: ExtractedItem = {
         id: newId(),
         name: `Nuevo ${itemLabel}`,
         description: "",
         price: null,
         category,
+        image_b64: undefined,
       };
       return {
         businessData: {
@@ -83,7 +114,7 @@ export const useAppStore = create<AppState>((set, get) => ({
       return {
         businessData: {
           ...state.businessData,
-          items: state.businessData.items.filter(it => it.id !== id),
+          items: state.businessData.items.filter((it) => it.id !== id),
         },
       };
     }),
@@ -106,18 +137,22 @@ export const useAppStore = create<AppState>((set, get) => ({
       return {
         businessData: {
           ...state.businessData,
-          categories: state.businessData.categories.filter(c => c !== name),
-          items: state.businessData.items.filter(it => it.category !== name),
+          categories: state.businessData.categories.filter((c) => c !== name),
+          items: state.businessData.items.filter((it) => it.category !== name),
         },
       };
     }),
 
   setProcessing: (v) => set({ isProcessing: v }),
-  setError: (e) => set({ error: e }),
+  setError:      (e) => set({ error: e }),
 
   reset: () =>
     set({
-      step: "upload", niche: null, uploadedFiles: [],
-      businessData: null, isProcessing: false, error: null,
+      step: "upload",
+      niche: null,
+      uploadedFiles: [],
+      businessData: null,
+      isProcessing: false,
+      error: null,
     }),
 }));

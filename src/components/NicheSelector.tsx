@@ -30,7 +30,7 @@ export function NicheSelector() {
         </div>
         {niche && (
           <span
-            className="text-xs px-2.5 py-1 rounded-md flex-shrink-0"
+            className="text-xs px-2.5 py-1 rounded-md shrink-0"
             style={{
               backgroundColor: "rgb(109 40 217 / 0.12)",
               border: "1px solid rgb(109 40 217 / 0.25)",

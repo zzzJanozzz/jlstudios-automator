@@ -4,7 +4,6 @@ import { BusinessData, ExtractedItem } from "../lib/types";
 function esc(s:string|null|undefined):string{if(!s)return"";return s.replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;").replace(/'/g,"&#39;")}
 function waHref(d:BusinessData):string{const n=d.contactInfo.whatsapp.replace(/\D/g,"");const m=encodeURIComponent(d.contactInfo.whatsappMessage||"Hola! Quiero consultarte.");return n?`https://wa.me/${n}?text=${m}`:"#"}
 function fonts(d:BusinessData):string{const s=[...new Set([d.designSystem.fontHeading,d.designSystem.fontBody])];return s.map(f=>`family=${encodeURIComponent(f)}:wght@300;400;500;600;700;800`).join("&")}
-function hexToRgb(hex:string):string{return`${parseInt(hex.slice(1,3),16)},${parseInt(hex.slice(3,5),16)},${parseInt(hex.slice(5,7),16)}`}
 function isLight(hex:string):boolean{const r=parseInt(hex.slice(1,3),16),g=parseInt(hex.slice(3,5),16),b=parseInt(hex.slice(5,7),16);return(0.299*r+0.587*g+0.114*b)>140}
 
 export function renderDefault(data: BusinessData): string {
@@ -116,7 +115,7 @@ a{color:inherit;text-decoration:none}
 </section>
 <main class="content">${sections}</main>
 <div class="footer-bar">
-  <span style="font-size:.8rem;color:var(--c-muted)">${esc(data.businessName)}${ci.schedule?` · ${esc(ci.schedule)}`:""}</span>
+  <span style="font-size:.8rem;color:var(--c-muted)">${esc(data.businessName)}${ci.schedule?` · ${esc(ci.schedule.map(s=>typeof s==='string'?s:`${s.day} ${s.open}-${s.close}`).join(', '))}`:""}</span>
   <a href="${wa}" class="nav-cta" target="_blank" rel="noopener" style="font-size:.8rem;padding:8px 16px">Consultar →</a>
 </div>
 <script>

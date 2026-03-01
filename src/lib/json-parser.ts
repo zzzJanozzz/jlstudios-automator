@@ -38,7 +38,7 @@ const DEFAULT_CONTACT: ContactInfo = {
   instagram:       "",
   facebook:        "",
   email:           "",
-  schedule:        "",
+  schedule:        [],
 };
 
 export function parseAndValidateJSON(raw: string, niche: Niche): ParseResult {
@@ -180,7 +180,7 @@ function normalize(raw: Record<string, unknown>, niche: Niche): BusinessData {
     instagram:       String(rawContact.instagram       || rawRedes.instagram       || "").replace("@", ""),
     facebook:        String(rawContact.facebook        || rawRedes.facebook        || "").replace("@", ""),
     email:           String(rawContact.email           || raw.email                || ""),
-    schedule:        String(rawContact.schedule        || raw.horario              || ""),
+    schedule:        Array.isArray(rawContact.schedule) ? rawContact.schedule : [],
   };
 
   // ── Layout ─────────────────────────────────────────────────────────────────

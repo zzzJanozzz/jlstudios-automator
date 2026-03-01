@@ -67,7 +67,7 @@ export function LivePreview() {
     <div className="flex flex-col h-full" style={{ backgroundColor: "#0c0c0d" }}>
       {/* Toolbar */}
       <div
-        className="flex items-center justify-between px-4 py-2 flex-shrink-0"
+        className="flex items-center justify-between px-4 py-2 shrink-0"
         style={{ borderBottom: "1px solid #27272a" }}
       >
         {/* Device selector */}

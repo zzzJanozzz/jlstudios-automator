@@ -1,4 +1,10 @@
 // src/app/page.tsx
+// ── No changes to page.tsx structure required ──
+// The "crear desde cero" flow is handled inside DropZone.tsx via createFromScratch().
+// page.tsx already renders <DropZone /> when a niche is selected, so the button
+// appears naturally inside the existing upload step.
+//
+// Only change: description text updated to reflect multi-format support.
 "use client";
 
 import { useAppStore } from "@/lib/store";
@@ -27,11 +33,10 @@ export default function Home() {
           borderBottom: "1px solid #27272a",
         }}
       >
-        <div className="max-w-[1800px] mx-auto flex items-center justify-between">
-          {/* Logo */}
+        <div className="max-w-450 mx-auto flex items-center justify-between">
           <div className="flex items-center gap-3">
             <div
-              className="w-8 h-8 rounded-lg flex items-center justify-center text-white font-bold text-sm flex-shrink-0"
+              className="w-8 h-8 rounded-lg flex items-center justify-center text-white font-bold text-sm shrink-0"
               style={{ background: "linear-gradient(135deg, #7c3aed, #c026d3)" }}
             >
               JL
@@ -41,12 +46,11 @@ export default function Home() {
                 JLStudios Web Automator
               </h1>
               <p className="text-[10px]" style={{ color: "#71717a" }}>
-                Next-Gen Engine v2.0
+                Next-Gen Engine v2.3
               </p>
             </div>
           </div>
 
-          {/* Step dots + reset */}
           <div className="flex items-center gap-4">
             <div className="hidden sm:flex items-center gap-1.5">
               {STEPS.map((s, i) => (
@@ -54,7 +58,7 @@ export default function Home() {
                   <div
                     className="rounded-full transition-all duration-300"
                     style={{
-                      width: step === s ? "8px" : "6px",
+                      width:  step === s ? "8px" : "6px",
                       height: step === s ? "8px" : "6px",
                       backgroundColor:
                         step === s
@@ -67,8 +71,7 @@ export default function Home() {
                   {i < STEPS.length - 1 && (
                     <div
                       style={{
-                        width: "20px",
-                        height: "1px",
+                        width: "20px", height: "1px",
                         backgroundColor: currentStepIndex > i ? "rgb(124 58 237 / 0.4)" : "#27272a",
                       }}
                     />
@@ -76,12 +79,8 @@ export default function Home() {
                 </div>
               ))}
             </div>
-
             {step !== "upload" && (
-              <button
-                onClick={reset}
-                className="btn-secondary text-xs py-1.5 px-3"
-              >
+              <button onClick={reset} className="btn-secondary text-xs py-1.5 px-3">
                 ✕ Nuevo proyecto
               </button>
             )}
@@ -93,7 +92,6 @@ export default function Home() {
       <main className="flex-1" style={{ backgroundColor: "#09090b" }}>
         <AnimatePresence mode="wait">
 
-          {/* STEP: UPLOAD */}
           {step === "upload" && (
             <motion.div
               key="upload"
@@ -103,7 +101,6 @@ export default function Home() {
               transition={{ duration: 0.35, ease: "easeOut" }}
               className="max-w-4xl mx-auto px-6 py-16"
             >
-              {/* Hero */}
               <div className="text-center mb-12">
                 <motion.div
                   initial={{ scale: 0.85, opacity: 0 }}
@@ -115,12 +112,9 @@ export default function Home() {
                     border: "1px solid rgb(109 40 217 / 0.25)",
                   }}
                 >
-                  <span
-                    className="w-1.5 h-1.5 rounded-full animate-pulse"
-                    style={{ backgroundColor: "#a78bfa" }}
-                  />
+                  <span className="w-1.5 h-1.5 rounded-full animate-pulse" style={{ backgroundColor: "#a78bfa" }} />
                   <span className="text-xs font-medium" style={{ color: "#a78bfa" }}>
-                    Motor de IA Activo
+                    Motor de IA Activo · Gemini 2.5 Flash
                   </span>
                 </motion.div>
 
@@ -128,7 +122,7 @@ export default function Home() {
                   className="text-4xl sm:text-5xl font-bold mb-4 tracking-tight leading-tight"
                   style={{ color: "#fafafa" }}
                 >
-                  Foto a{" "}
+                  Archivo a{" "}
                   <span
                     style={{
                       background: "linear-gradient(135deg, #a78bfa, #e879f9)",
@@ -144,17 +138,15 @@ export default function Home() {
                 </h2>
 
                 <p className="text-lg max-w-2xl mx-auto leading-relaxed" style={{ color: "#a1a1aa" }}>
-                  Subí una foto del menú, catálogo o lista de servicios. La IA extrae
-                  los datos, diseña el sitio y lo exporta listo para subir al hosting.
+                  Subí una foto, PDF, Word o Excel con tu menú, servicios o precios.
+                  La IA extrae todo y diseña el sitio. O creá desde cero manualmente.
                 </p>
               </div>
 
-              {/* Step 1: Niche selector */}
               <div className="mb-8">
                 <NicheSelector />
               </div>
 
-              {/* Step 2: DropZone — appears after niche is selected */}
               <AnimatePresence>
                 {niche && (
                   <motion.div
@@ -170,7 +162,6 @@ export default function Home() {
             </motion.div>
           )}
 
-          {/* STEP: PROCESSING */}
           {step === "processing" && (
             <motion.div
               key="processing"
@@ -183,7 +174,6 @@ export default function Home() {
             </motion.div>
           )}
 
-          {/* STEP: EDITING / EXPORTING */}
           {(step === "editing" || step === "exporting") && (
             <motion.div
               key="editing"

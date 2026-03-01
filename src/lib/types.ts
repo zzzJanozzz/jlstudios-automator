@@ -1,5 +1,7 @@
-// src/lib/types.ts  — DATA CONTRACT v2.2
-// Aligned with: Python app.py + menu.json, SMS Dashboard, 3 premium templates
+// src/lib/types.ts — DATA CONTRACT v2.3
+// Changes from v2.2:
+//  • ContactInfo.schedule → ScheduleDay[]  (structured horario)
+//  • ExtractedItem.image_b64              (optional per-item image)
 // ─────────────────────────────────────────────────────────────────────────────
 
 export const SUPPORTED_NICHES = [
@@ -11,7 +13,27 @@ export const SUPPORTED_NICHES = [
 
 export type Niche = (typeof SUPPORTED_NICHES)[number];
 export type TemplateType = "gastro" | "beauty" | "gym" | "default";
+export type VisualStyle = "minimal" | "bold" | "elegant" | "playful" | "corporate";
 
+// ─── Schedule ────────────────────────────────────────────────────────────────
+export interface ScheduleDay {
+  day: string;      // "Lunes" | "Martes" | etc.
+  isOpen: boolean;
+  open: string;     // "09:00"
+  close: string;    // "18:00"
+}
+
+export const DEFAULT_SCHEDULE: ScheduleDay[] = [
+  { day: "Lunes",     isOpen: true,  open: "09:00", close: "18:00" },
+  { day: "Martes",    isOpen: true,  open: "09:00", close: "18:00" },
+  { day: "Miércoles", isOpen: true,  open: "09:00", close: "18:00" },
+  { day: "Jueves",    isOpen: true,  open: "09:00", close: "18:00" },
+  { day: "Viernes",   isOpen: true,  open: "09:00", close: "18:00" },
+  { day: "Sábado",    isOpen: true,  open: "09:00", close: "13:00" },
+  { day: "Domingo",   isOpen: false, open: "09:00", close: "13:00" },
+];
+
+// ─── Niche Config ────────────────────────────────────────────────────────────
 export interface NicheConfig {
   id: Niche;
   label: string;
@@ -44,6 +66,7 @@ export const NICHE_CONFIGS: Record<Niche, NicheConfig> = {
   ferreteria:        { id:"ferreteria",         label:"Ferretería",             icon:"🛠️", defaultCTA:"Consultá disponibilidad",     itemLabel:"producto",    templateType:"default" },
 };
 
+// ─── Design System ───────────────────────────────────────────────────────────
 export interface DesignSystem {
   primaryColor: string;
   secondaryColor: string;
@@ -55,17 +78,21 @@ export interface DesignSystem {
   fontBody: string;
   borderRadius: string;
   cardShadow: string;
-  style: "minimal" | "bold" | "elegant" | "playful" | "corporate";
+  style: VisualStyle;
 }
 
+// ─── Extracted Item ──────────────────────────────────────────────────────────
 export interface ExtractedItem {
   id: string;
   name: string;
   description: string;
   price: string | null;
   category: string;
+  /** Optional per-item photo uploaded by client in CMS */
+  image_b64?: string;
 }
 
+// ─── Contact Info ─────────────────────────────────────────────────────────────
 export interface ContactInfo {
   whatsapp: string;
   whatsappMessage: string;
@@ -74,12 +101,13 @@ export interface ContactInfo {
   instagram: string;
   facebook: string;
   email: string;
-  schedule: string;
+  /** Structured weekly schedule — replaces old free-text string */
+  schedule: ScheduleDay[];
 }
 
-// ── THE MASTER CONTRACT ─────────────────────────────────────────────────────
-// Each field here maps EXACTLY to something editable in the SMS Dashboard
-// AND to a visible element in the generated site HTML.
+// ─── Master Business Data Contract ───────────────────────────────────────────
+// Every field maps 1:1 to something editable in the SMS Dashboard CMS
+// AND to a visible element in the generated HTML site.
 export interface BusinessData {
   businessName: string;
   tagline: string;
@@ -90,12 +118,52 @@ export interface BusinessData {
   designSystem: DesignSystem;
   layoutStyle: "grid" | "list";
   contactInfo: ContactInfo;
-  /** Cover/hero image — editable in CMS — maps to Python portada_b64 */
+  /** Hero/portada cover image — maps to Python portada_b64 */
   portada_b64?: string;
-  /** Logo image — editable in CMS — maps to Python logo_b64 */
+  /** Business logo — maps to Python logo_b64 */
   logo_b64?: string;
 }
 
+// ─── Default empty BusinessData (for "create from scratch") ──────────────────
+export function makeEmptyBusinessData(niche: Niche): BusinessData {
+  const cfg = NICHE_CONFIGS[niche];
+  return {
+    businessName: "Mi Negocio",
+    tagline: "",
+    niche,
+    seoDescription: "",
+    categories: ["General"],
+    items: [],
+    designSystem: {
+      primaryColor:   "#7c3aed",
+      secondaryColor: "#6d28d9",
+      backgroundColor: "#09090b",
+      textColor:      "#fafafa",
+      mutedColor:     "#a1a1aa",
+      accentColor:    "#a78bfa",
+      fontHeading:    "Playfair Display",
+      fontBody:       "Inter",
+      borderRadius:   "8px",
+      cardShadow:     "0 4px 24px rgba(0,0,0,0.4)",
+      style:          "minimal",
+    },
+    layoutStyle: "grid",
+    contactInfo: {
+      whatsapp:        "",
+      whatsappMessage: `Hola! Quiero consultar sobre ${cfg.label}.`,
+      address:         "",
+      mapUrl:          "",
+      instagram:       "",
+      facebook:        "",
+      email:           "",
+      schedule:        DEFAULT_SCHEDULE,
+    },
+    portada_b64: undefined,
+    logo_b64:    undefined,
+  };
+}
+
+// ─── App State ────────────────────────────────────────────────────────────────
 export interface AppState {
   step: "upload" | "processing" | "editing" | "exporting";
   niche: Niche | null;
@@ -104,19 +172,21 @@ export interface AppState {
   isProcessing: boolean;
   error: string | null;
 
-  setStep: (step: AppState["step"]) => void;
-  setNiche: (niche: Niche) => void;
-  setUploadedFiles: (files: File[]) => void;
-  setBusinessData: (data: BusinessData) => void;
-  updateDesignSystem: (updates: Partial<DesignSystem>) => void;
-  updateItem: (id: string, updates: Partial<ExtractedItem>) => void;
-  updateContactInfo: (updates: Partial<ContactInfo>) => void;
+  setStep:             (step: AppState["step"]) => void;
+  setNiche:            (niche: Niche) => void;
+  setUploadedFiles:    (files: File[]) => void;
+  setBusinessData:     (data: BusinessData) => void;
+  createFromScratch:   (niche: Niche) => void;
+  updateDesignSystem:  (updates: Partial<DesignSystem>) => void;
+  updateItem:          (id: string, updates: Partial<ExtractedItem>) => void;
+  updateContactInfo:   (updates: Partial<ContactInfo>) => void;
+  updateScheduleDay:   (index: number, updates: Partial<ScheduleDay>) => void;
   updateBusinessField: (field: keyof BusinessData, value: unknown) => void;
-  addItem: (category: string) => void;
-  removeItem: (id: string) => void;
-  addCategory: (name: string) => void;
-  removeCategory: (name: string) => void;
-  setProcessing: (v: boolean) => void;
-  setError: (e: string | null) => void;
-  reset: () => void;
+  addItem:             (category: string) => void;
+  removeItem:          (id: string) => void;
+  addCategory:         (name: string) => void;
+  removeCategory:      (name: string) => void;
+  setProcessing:       (v: boolean) => void;
+  setError:            (e: string | null) => void;
+  reset:               () => void;
 }
