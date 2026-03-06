@@ -68,8 +68,13 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
       return errorResponse(result.error || "No se pudo extraer información válida del archivo.", 422);
     }
 
-    if (!result.data || !result.data.businessName) {
-      return errorResponse("La IA retornó una respuesta incompleta. Asegúrate de subir un archivo legible.", 422);
+    if (!result.data) {
+      return errorResponse("La IA retornó una respuesta vacía. Asegúrate de subir un archivo legible.", 422);
+    }
+
+    // RELAJACIÓN DE RESTRICCIÓN: Asignación de nombre por defecto si la extracción es parcial
+    if (!result.data.businessName || result.data.businessName.trim() === "") {
+      result.data.businessName = "Mi Negocio";
     }
 
     // 6. Éxito
