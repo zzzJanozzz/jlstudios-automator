@@ -1,7 +1,7 @@
-// src/lib/types.ts — DATA CONTRACT v2.3
-// Changes from v2.2:
-//  • ContactInfo.schedule → ScheduleDay[]  (structured horario)
-//  • ExtractedItem.image_b64              (optional per-item image)
+// src/lib/types.ts — DATA CONTRACT v2.4
+// Changes from v2.3:
+//  • ScheduleDay: doble turno (hasSecondShift, open2, close2)
+//  • TemplateType: agrega "rochas"
 // ─────────────────────────────────────────────────────────────────────────────
 
 export const SUPPORTED_NICHES = [
@@ -9,28 +9,33 @@ export const SUPPORTED_NICHES = [
   "catalogo_ropa","estudio_abogados","creador_contenido","gimnasio","veterinaria",
   "inmobiliaria","floreria","panaderia","estudio_tatuajes","fotografia",
   "academia_idiomas","coworking","lavanderia","optica","ferreteria",
+  "rochas_rotiseria",
 ] as const;
 
 export type Niche = (typeof SUPPORTED_NICHES)[number];
-export type TemplateType = "gastro" | "beauty" | "gym" | "default";
+export type TemplateType = "gastro" | "beauty" | "gym" | "default" | "rochas";
 export type VisualStyle = "minimal" | "bold" | "elegant" | "playful" | "corporate";
 
 // ─── Schedule ────────────────────────────────────────────────────────────────
 export interface ScheduleDay {
-  day: string;      // "Lunes" | "Martes" | etc.
+  day: string;       // "Lunes" | "Martes" | etc.
   isOpen: boolean;
-  open: string;     // "09:00"
-  close: string;    // "18:00"
+  open: string;      // "09:00"
+  close: string;     // "18:00"
+  // Doble turno — ej: "11:00–14:00 / 19:00–22:00"
+  hasSecondShift?: boolean;
+  open2?: string;    // "19:00"
+  close2?: string;   // "22:00"
 }
 
 export const DEFAULT_SCHEDULE: ScheduleDay[] = [
-  { day: "Lunes",     isOpen: true,  open: "09:00", close: "18:00" },
-  { day: "Martes",    isOpen: true,  open: "09:00", close: "18:00" },
-  { day: "Miércoles", isOpen: true,  open: "09:00", close: "18:00" },
-  { day: "Jueves",    isOpen: true,  open: "09:00", close: "18:00" },
-  { day: "Viernes",   isOpen: true,  open: "09:00", close: "18:00" },
-  { day: "Sábado",    isOpen: true,  open: "09:00", close: "13:00" },
-  { day: "Domingo",   isOpen: false, open: "09:00", close: "13:00" },
+  { day:"Lunes",     isOpen:true,  open:"09:00", close:"18:00" },
+  { day:"Martes",    isOpen:true,  open:"09:00", close:"18:00" },
+  { day:"Miércoles", isOpen:true,  open:"09:00", close:"18:00" },
+  { day:"Jueves",    isOpen:true,  open:"09:00", close:"18:00" },
+  { day:"Viernes",   isOpen:true,  open:"09:00", close:"18:00" },
+  { day:"Sábado",    isOpen:true,  open:"09:00", close:"13:00" },
+  { day:"Domingo",   isOpen:false, open:"09:00", close:"13:00" },
 ];
 
 // ─── Niche Config ────────────────────────────────────────────────────────────
@@ -63,7 +68,8 @@ export const NICHE_CONFIGS: Record<Niche, NicheConfig> = {
   coworking:         { id:"coworking",          label:"Coworking",              icon:"💼", defaultCTA:"Reservá tu espacio",          itemLabel:"plan",        templateType:"gym"     },
   lavanderia:        { id:"lavanderia",         label:"Lavandería",             icon:"🧺", defaultCTA:"Pedí retiro a domicilio",     itemLabel:"servicio",    templateType:"beauty"  },
   optica:            { id:"optica",             label:"Óptica",                 icon:"👓", defaultCTA:"Agendá tu examen visual",     itemLabel:"producto",    templateType:"beauty"  },
-  ferreteria:        { id:"ferreteria",         label:"Ferretería",             icon:"🛠️", defaultCTA:"Consultá disponibilidad",     itemLabel:"producto",    templateType:"default" },
+  ferreteria:        { id:"ferreteria",         label:"Ferretería",             icon:"🛠️", defaultCTA:"Consultá disponibilidad",     itemLabel:"producto",    templateType:"default"  },
+  rochas_rotiseria:  { id:"rochas_rotiseria",   label:"Rocha's Rotisería ✦",    icon:"🔥", defaultCTA:"¡Hacé tu pedido!",             itemLabel:"plato",       templateType:"rochas"   },
 };
 
 // ─── Design System ───────────────────────────────────────────────────────────
@@ -88,7 +94,6 @@ export interface ExtractedItem {
   description: string;
   price: string | null;
   category: string;
-  /** Optional per-item photo uploaded by client in CMS */
   image_b64?: string;
 }
 
@@ -101,13 +106,10 @@ export interface ContactInfo {
   instagram: string;
   facebook: string;
   email: string;
-  /** Structured weekly schedule — replaces old free-text string */
   schedule: ScheduleDay[];
 }
 
 // ─── Master Business Data Contract ───────────────────────────────────────────
-// Every field maps 1:1 to something editable in the SMS Dashboard CMS
-// AND to a visible element in the generated HTML site.
 export interface BusinessData {
   businessName: string;
   tagline: string;
@@ -118,13 +120,11 @@ export interface BusinessData {
   designSystem: DesignSystem;
   layoutStyle: "grid" | "list";
   contactInfo: ContactInfo;
-  /** Hero/portada cover image — maps to Python portada_b64 */
   portada_b64?: string;
-  /** Business logo — maps to Python logo_b64 */
   logo_b64?: string;
 }
 
-// ─── Default empty BusinessData (for "create from scratch") ──────────────────
+// ─── Default empty BusinessData ──────────────────────────────────────────────
 export function makeEmptyBusinessData(niche: Niche): BusinessData {
   const cfg = NICHE_CONFIGS[niche];
   return {
@@ -135,17 +135,17 @@ export function makeEmptyBusinessData(niche: Niche): BusinessData {
     categories: ["General"],
     items: [],
     designSystem: {
-      primaryColor:   "#7c3aed",
-      secondaryColor: "#6d28d9",
+      primaryColor:    "#7c3aed",
+      secondaryColor:  "#6d28d9",
       backgroundColor: "#09090b",
-      textColor:      "#fafafa",
-      mutedColor:     "#a1a1aa",
-      accentColor:    "#a78bfa",
-      fontHeading:    "Playfair Display",
-      fontBody:       "Inter",
-      borderRadius:   "8px",
-      cardShadow:     "0 4px 24px rgba(0,0,0,0.4)",
-      style:          "minimal",
+      textColor:       "#fafafa",
+      mutedColor:      "#a1a1aa",
+      accentColor:     "#a78bfa",
+      fontHeading:     "Playfair Display",
+      fontBody:        "Inter",
+      borderRadius:    "8px",
+      cardShadow:      "0 4px 24px rgba(0,0,0,0.4)",
+      style:           "minimal",
     },
     layoutStyle: "grid",
     contactInfo: {

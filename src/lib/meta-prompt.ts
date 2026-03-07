@@ -144,6 +144,7 @@ function getToneForNiche(niche: Niche): string {
     lavanderia:        "práctico, limpio y confiable. Transmitís comodidad, tiempo libre y ropa impecable",
     optica:            "profesional, moderno y orientado al bienestar. Transmitís claridad visual y estilo",
     ferreteria:        "práctico, resolutivo y servicial. Transmitís que tenés todo lo que el cliente necesita",
+    rochas_rotiseria:  "casero, abundante y directo. Transmitís calor de hogar, porciones generosas y precio justo. Usá adjetivos como casero, recién hecho, abundante, sabroso",
   };
   return tones[niche] || "profesional, claro y orientado al cliente";
 }
@@ -169,6 +170,7 @@ function getColorPsychology(niche: Niche): string {
     coworking:         "- Blancos/grises claros → espacios abiertos e inspiradores\n- Verdes → productividad y bienestar\n- Naranjas → creatividad y comunidad\n- Azules → enfoque y profesionalismo",
     lavanderia:        "- Azules claros/celestes → limpieza, frescura y pureza\n- Blancos → higiene y confianza\n- Verdes → eco-friendly y sostenibilidad\n- Lavanda → suavidad y aroma agradable",
     optica:            "- Azules → visión, tecnología y precisión\n- Blancos → clínica y confianza\n- Dorados → marcos premium y estilo\n- Verdes → salud visual y bienestar",
+    rochas_rotiseria:  "- Naranjas/rojos cálidos → fuego, brasas y apetito\n- Marrones/tierra → artesanía y lo casero\n- Cremas y ámbar → calidez hogareña\n- Fondos oscuros (#0e0a07) → contraste premium y elegancia",
     ferreteria:        "- Naranjas/amarillos → bricolaje, acción y herramientas\n- Azules oscuros → calidad industrial y confianza\n- Rojos → ofertas y urgencia\n- Grises → lo industrial y funcional",
   };
   return psychology[niche] || "- Usá colores coherentes con el rubro y el target del cliente";
